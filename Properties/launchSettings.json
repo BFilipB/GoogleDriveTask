@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "GoogleDriveCli": {
+      "commandName": "Project",
+      "commandLineArgs": "upload D:\\Downloads\\Resume-2.pdf NewFolder/Test"
+    }
+  }
+}

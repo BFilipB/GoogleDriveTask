@@ -1,0 +1,49 @@
+# Build results
+bin/
+obj/
+*.dll
+*.exe
+*.so
+*.dylib
+
+# NuGet
+.nuget/
+*.nupkg
+*.snupkg
+
+# Visual Studio
+.vs/
+.vscode/
+*.sln.iml
+*.user
+*.userprefs
+*.suo
+*.sln
+.DS_Store
+
+# OAuth credentials (NEVER commit these!)
+client_secret.json
+token.json
+*.json.bak
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Build output
+publish/
+dist/
+
+# Internal decision/documentation files (local reference only)
+SETUP.md
+DEPLOYMENT_GUIDE.md
+REFACTORING_SUMMARY.md
+GITHUB_PUSH_INSTRUCTIONS.md
+ARCHITECTURE_NOTES.md
+DECISIONS.md
