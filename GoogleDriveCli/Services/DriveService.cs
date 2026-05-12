@@ -22,7 +22,6 @@ namespace GoogleDriveCli.Services
     public class DriveService
     {
         private readonly Google.Apis.Drive.v3.DriveService _service;
-        private readonly RetryPolicy _retryPolicy;
 
         public DriveService(UserCredential credential)
         {
@@ -31,21 +30,18 @@ namespace GoogleDriveCli.Services
                 HttpClientInitializer = credential,
                 ApplicationName = "GoogleDriveCli"
             });
-            _retryPolicy = new RetryPolicy(maxAttempts: 5, initialDelayMs: 200, backoffMultiplier: 2.0);
         }
 
         /// <summary>
-        /// Lists all files in the root of Google Drive with retry logic.
+        /// Lists all files in the root of Google Drive.
         /// </summary>
         public async Task<List<DriveFileInfo>> ListFilesAsync(string? parentFolderId = null)
         {
             var files = new List<DriveFileInfo>();
-
-            var result = await _retryPolicy.ExecuteAsync(async () =>
+            string? pageToken = null;
+            
+            try
             {
-                var fileList = new List<DriveFileInfo>();
-                string? pageToken = null;
-
                 do
                 {
                     var request = _service.Files.List();
@@ -63,64 +59,10 @@ namespace GoogleDriveCli.Services
                         request.Q = $"'{parentFolderId}' in parents and trashed=false";
                     }
 
-                    var fileResult = await request.ExecuteAsync();
-                    if (fileResult.Files != null)
+                    var result = await request.ExecuteAsync();
+                    if (result.Files != null)
                     {
-                        foreach (var file in fileResult.Files)
-                        {
-                            fileList.Add(new DriveFileInfo
-                            {
-                                Id = file.Id,
-                                Name = file.Name,
-                                IsFolder = file.MimeType == "application/vnd.google-apps.folder",
-                                MimeType = file.MimeType,
-                                Size = file.Size,
-                                ModifiedTime = file.ModifiedTimeDateTimeOffset
-                            });
-                        }
-                    }
-                    pageToken = fileResult.NextPageToken;
-                } while (!string.IsNullOrEmpty(pageToken));
-
-                return fileList;
-            }, "ListFiles");
-
-            if (result.Success && result.Data != null)
-            {
-                return result.Data;
-            }
-
-            if (result.LastException != null)
-            {
-                ConsoleStatisticsRenderer.RenderError($"Failed to list files after {result.Attempts} attempts: {result.LastException.Message}");
-            }
-
-            return files;
-        }
-
-        /// <summary>
-        /// Searches for files by name in Google Drive with retry logic.
-        /// </summary>
-        public async Task<List<DriveFileInfo>> SearchFilesAsync(string query)
-        {
-            var result = await _retryPolicy.ExecuteAsync(async () =>
-            {
-                var files = new List<DriveFileInfo>();
-                string? pageToken = null;
-
-                do
-                {
-                    var request = _service.Files.List();
-                    request.Spaces = "drive";
-                    request.Fields = "files(id, name, mimeType, size, modifiedTime), nextPageToken";
-                    request.Q = $"name contains '{EscapeQuery(query)}' and trashed=false";
-                    request.PageSize = 1000;
-                    request.PageToken = pageToken;
-
-                    var fileResult = await request.ExecuteAsync();
-                    if (fileResult.Files != null)
-                    {
-                        foreach (var file in fileResult.Files)
+                        foreach (var file in result.Files)
                         {
                             files.Add(new DriveFileInfo
                             {
@@ -133,32 +75,64 @@ namespace GoogleDriveCli.Services
                             });
                         }
                     }
-                    pageToken = fileResult.NextPageToken;
+                    pageToken = result.NextPageToken;
                 } while (!string.IsNullOrEmpty(pageToken));
-
-                return files;
-            }, "SearchFiles");
-
-            if (result.Success && result.Data != null)
+            }
+            catch (Exception ex)
             {
-                return result.Data;
+                Console.WriteLine($"Error listing files: {ex.Message}");
             }
 
-            if (result.LastException != null)
-            {
-                ConsoleStatisticsRenderer.RenderError($"Search failed after {result.Attempts} attempts: {result.LastException.Message}");
-            }
-
-            return new List<DriveFileInfo>();
+            return files;
         }
 
         /// <summary>
-        /// Downloads a file by its ID to the specified local path with retry logic.
+        /// Searches for files by name in Google Drive.
+        /// </summary>
+        public async Task<List<DriveFileInfo>> SearchFilesAsync(string query)
+        {
+            var files = new List<DriveFileInfo>();
+
+            try
+            {
+                var request = _service.Files.List();
+                request.Spaces = "drive";
+                request.Fields = "files(id, name, mimeType, size, modifiedTime), nextPageToken";
+                request.Q = $"name contains '{query}' and trashed=false";
+                request.PageSize = 1000;
+
+                var result = await request.ExecuteAsync();
+                if (result.Files != null)
+                {
+                    foreach (var file in result.Files)
+                    {
+                        files.Add(new DriveFileInfo
+                        {
+                            Id = file.Id,
+                            Name = file.Name,
+                            IsFolder = file.MimeType == "application/vnd.google-apps.folder",
+                            MimeType = file.MimeType,
+                            Size = file.Size,
+                            ModifiedTime = file.ModifiedTimeDateTimeOffset
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error searching files: {ex.Message}");
+            }
+
+            return files;
+        }
+
+        /// <summary>
+        /// Downloads a file by its ID to the specified local path.
         /// Returns true if successful, false otherwise.
         /// </summary>
         public async Task<bool> DownloadFileAsync(string fileId, string localPath)
         {
-            var result = await _retryPolicy.ExecuteAsync(async () =>
+            try
             {
                 var request = _service.Files.Get(fileId);
                 using (var stream = new FileStream(localPath, FileMode.Create, FileAccess.Write))
@@ -166,34 +140,27 @@ namespace GoogleDriveCli.Services
                     await request.DownloadAsync(stream);
                 }
                 return true;
-            }, $"DownloadFile:{fileId}");
-
-            if (!result.Success)
+            }
+            catch (Exception ex)
             {
-                if (File.Exists(localPath))
-                {
-                    try { File.Delete(localPath); } catch { }
-                }
-                ConsoleStatisticsRenderer.RenderWarning($"Failed to download '{Path.GetFileName(localPath)}' after {result.Attempts} attempts");
+                Console.WriteLine($"Error downloading file {fileId}: {ex.Message}");
                 return false;
             }
-
-            return true;
         }
 
         /// <summary>
-        /// Uploads a file from local file system to a folder in Google Drive with retry logic.
+        /// Uploads a file from local file system to a folder in Google Drive.
         /// If parentFolderId is null, uploads to root.
         /// </summary>
         public async Task<bool> UploadFileAsync(string localPath, string? parentFolderId = null)
         {
             if (!File.Exists(localPath))
             {
-                ConsoleStatisticsRenderer.RenderError($"Local file not found: {localPath}");
+                Console.WriteLine($"Local file not found: {localPath}");
                 return false;
             }
 
-            var result = await _retryPolicy.ExecuteAsync(async () =>
+            try
             {
                 var fileMetadata = new Google.Apis.Drive.v3.Data.File()
                 {
@@ -209,33 +176,25 @@ namespace GoogleDriveCli.Services
                 {
                     var request = _service.Files.Create(fileMetadata, stream, "application/octet-stream");
                     request.Fields = "id";
-                    var uploadResult = await request.UploadAsync();
+                    var result = await request.UploadAsync();
 
-                    if (uploadResult.Status == Google.Apis.Upload.UploadStatus.Completed)
+                    if (result.Status == Google.Apis.Upload.UploadStatus.Completed)
                     {
+                        Console.WriteLine($"File uploaded successfully: {fileMetadata.Name}");
                         return true;
                     }
-                    else
-                    {
-                        throw new Exception($"Upload status: {uploadResult.Status}");
-                    }
                 }
-            }, $"UploadFile:{Path.GetFileName(localPath)}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error uploading file: {ex.Message}");
+            }
 
-            if (result.Success)
-            {
-                ConsoleStatisticsRenderer.RenderSuccess($"File uploaded successfully: {Path.GetFileName(localPath)}");
-                return true;
-            }
-            else
-            {
-                ConsoleStatisticsRenderer.RenderError($"Upload failed after {result.Attempts} attempts: {result.LastException?.Message}");
-                return false;
-            }
+            return false;
         }
 
         /// <summary>
-        /// Finds or creates a folder by path (e.g., "Folder1/Subfolder2") with retry logic.
+        /// Finds or creates a folder by path (e.g., "Folder1/Subfolder2").
         /// Returns the folder ID, or null if creation fails.
         /// </summary>
         public async Task<string?> FindOrCreateFolderAsync(string folderPath)
@@ -248,36 +207,31 @@ namespace GoogleDriveCli.Services
 
             foreach (var part in parts)
             {
-                var result = await _retryPolicy.ExecuteAsync(async () =>
-                {
-                    var request = _service.Files.List();
-                    request.Spaces = "drive";
-                    request.Fields = "files(id, name, mimeType)";
-                    request.PageSize = 1000;
-                    request.Q = string.IsNullOrEmpty(currentParentId)
-                        ? $"name = '{EscapeQuery(part)}' and mimeType = 'application/vnd.google-apps.folder' and trashed=false and 'root' in parents"
-                        : $"name = '{EscapeQuery(part)}' and mimeType = 'application/vnd.google-apps.folder' and trashed=false and '{currentParentId}' in parents";
+                // Search for folder with this name in current parent
+                var request = _service.Files.List();
+                request.Spaces = "drive";
+                request.Fields = "files(id, name, mimeType)";
+                request.PageSize = 1000;
 
-                    var searchResult = await request.ExecuteAsync();
-                    return searchResult;
-                }, $"FindFolder:{part}");
-
-                if (!result.Success)
+                if (string.IsNullOrEmpty(currentParentId))
                 {
-                    ConsoleStatisticsRenderer.RenderWarning($"Failed to search for folder '{part}'");
-                    return null;
-                }
-
-                var searchResult = result.Data;
-                if (searchResult?.Files?.Count > 0)
-                {
-                    currentParentId = searchResult.Files[0].Id;
+                    request.Q = $"name = '{part}' and mimeType = 'application/vnd.google-apps.folder' and trashed=false and 'root' in parents";
                 }
                 else
                 {
-                    // Create the folder
-                    var createResult = await _retryPolicy.ExecuteAsync(async () =>
+                    request.Q = $"name = '{part}' and mimeType = 'application/vnd.google-apps.folder' and trashed=false and '{currentParentId}' in parents";
+                }
+
+                try
+                {
+                    var result = await request.ExecuteAsync();
+                    if (result.Files?.Count > 0)
                     {
+                        currentParentId = result.Files[0].Id;
+                    }
+                    else
+                    {
+                        // Create the folder
                         var folderMetadata = new Google.Apis.Drive.v3.Data.File()
                         {
                             Name = part,
@@ -295,25 +249,20 @@ namespace GoogleDriveCli.Services
 
                         var createRequest = _service.Files.Create(folderMetadata);
                         createRequest.Fields = "id";
-                        return await createRequest.ExecuteAsync();
-                    }, $"CreateFolder:{part}");
-
-                    if (!createResult.Success || createResult.Data == null)
-                    {
-                        ConsoleStatisticsRenderer.RenderWarning($"Failed to create folder '{part}'");
-                        return null;
+                        var createdFolder = await createRequest.ExecuteAsync();
+                        currentParentId = createdFolder.Id;
                     }
-
-                    currentParentId = createResult.Data.Id;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error finding/creating folder '{part}': {ex.Message}");
+                    return null;
                 }
             }
 
             return currentParentId;
         }
-
-        private static string EscapeQuery(string query)
-        {
-            return query.Replace("'", "\\'");
-        }
     }
 }
+
+

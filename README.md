@@ -1,351 +1,372 @@
 # Google Drive CLI Manager
 
-This is a command-line tool I built for managing Google Drive files directly from your terminal. You can download all your files in parallel, search for specific files, and upload new ones—all without leaving the command line.
+A command-line interface (CLI) tool for interacting with Google Drive. This application allows you to authenticate with Google Drive, synchronize files locally using parallel processing, search for files, and upload local files to your Drive.
+
+## Features
+
+- **OAuth 2.0 Authentication**: Securely authenticate with Google Drive. Tokens are stored locally and reused to avoid re-authentication.
+- **Parallel Sync**: Download all files from Google Drive to a local directory with configurable concurrency control.
+- **Search**: Search for files in Google Drive with status indicators showing which files are already downloaded locally.
+- **Upload**: Upload files to Google Drive with support for creating nested folder paths.
+- **Statistics**: Detailed sync statistics including success/failure counts, total data transferred, and elapsed time.
+- **Thread-Safe**: Uses Interlocked operations and SemaphoreSlim for safe concurrent downloads.
 
 ## Prerequisites
 
-- **.NET 8.0 or later** – [Download here](https://dotnet.microsoft.com/download)
-- **Google account** with Google Drive access
-- **Google Cloud project** with Drive API enabled (see setup below)
+- .NET 8.0 SDK or later
+- A Google Cloud project with the Google Drive API enabled
+- OAuth 2.0 credentials (client_secret.json)
 
-## Quick Start
+## Setup Instructions
 
-1. Clone the repo:
-```bash
-git clone https://github.com/BFilipB/GoogleDriveTask.git
-cd GoogleDriveTask
-```
+### 1. Create a Google Cloud Project
 
-2. Build it:
-```bash
+1. Go to [Google Cloud Console](https://console.cloud.google.com)
+2. Create a new project
+3. Enable the Google Drive API for your project
+4. Create OAuth 2.0 credentials (Desktop application)
+5. Download the credentials as client_secret.json
+
+### 2. Place Credentials File
+
+The application uses a robust credential lookup mechanism that checks multiple locations:
+
+1. **Current working directory** (where you run the command)
+2. **Project root** (when using `dotnet run` from the project folder)
+3. **Executable directory** (when running the compiled binary)
+
+You can place client_secret.json in any of these locations. For development, place it in the project root:
+
+`
+GoogleDriveCli/
++-- GoogleDriveCli.csproj
++-- client_secret.json  <-- Place the file here for development
++-- Program.cs
++-- Services/
++-- README.md
+`
+
+For production (compiled binary), place it in the same directory as the executable:
+
+`
+bin/Release/net8.0/
++-- GoogleDriveCli.exe
++-- client_secret.json  <-- Place the file here for release builds
++-- (other DLL files)
+`
+
+The application will automatically discover the credentials file from any of these locations and display a success message upon authentication.
+
+### 3. Build the Application
+
+`ash
+cd GoogleDriveCli
 dotnet build -c Release
-```
+`
 
-3. Set up Google credentials (see **Google Drive API Setup** section below)
+### 4. Run the Application
 
-4. Run commands:
-```bash
-dotnet run --configuration Release -- sync
-dotnet run --configuration Release -- search "my photos"
-dotnet run --configuration Release -- upload "C:\Users\You\file.txt" "MyFolder"
-```
+Navigate to the directory containing the compiled executable:
 
-Or if you prefer using the compiled executable directly:
-```bash
+`ash
 cd bin/Release/net8.0
-.\GoogleDriveCli.exe sync
-.\GoogleDriveCli.exe search "my photos"
-.\GoogleDriveCli.exe upload "C:\Users\You\file.txt" "MyFolder"
-```
 
-## Google Drive API Setup – Complete Step-by-Step
+# Display help
+./GoogleDriveCli help
 
-This is the most important part. You need to create a Google Cloud project and get OAuth credentials. Here's exactly how:
+# Sync all files from Google Drive
+./GoogleDriveCli sync
 
-### Step 1: Create a Google Cloud Project
+# Search for files
+./GoogleDriveCli search "photos"
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. At the top, you'll see "Select a Project" dropdown. Click it.
-3. Click the **+ CREATE PROJECT** button
-4. Enter a project name (e.g., "GoogleDriveCli")
-5. Click **CREATE**
-6. Wait a few seconds for the project to be created, then you'll be taken to the project dashboard
+# Upload a file to the root of Google Drive
+./GoogleDriveCli upload "C:\path\to\file.txt"
 
-### Step 2: Enable the Google Drive API
+# Upload a file to a specific folder (creates folder if it doesn't exist)
+./GoogleDriveCli upload "C:\path\to\file.txt" "MyFolder/SubFolder"
+`
 
-1. In the Google Cloud Console, go to **APIs & Services** > **Library** (left sidebar)
-2. Search for "Google Drive API"
-3. Click on **Google Drive API**
-4. Click the blue **ENABLE** button
-5. Wait for it to enable (a few seconds)
+## Command Reference
 
-### Step 3: Create OAuth 2.0 Credentials
+### sync
+Downloads all files from Google Drive to a local Downloads directory.
 
-1. Go back to **APIs & Services** > **Credentials** (left sidebar)
-2. Click **+ CREATE CREDENTIALS** button (top left)
-3. Select **OAuth client ID**
-4. If you see a warning about the OAuth consent screen, click **CONFIGURE CONSENT SCREEN**
-   - Select **External** for user type
-   - Click **CREATE**
-   - Fill in the basic info (App name, your email, etc.)
-   - Scroll down and add your email to the "Test users" section
-   - Click **SAVE AND CONTINUE** through all steps
-   - Don't worry about the optional fields; just skip them
-   - Click **SAVE AND CONTINUE** on the final page
-5. Go back to **Credentials** and click **+ CREATE CREDENTIALS** > **OAuth client ID** again
-6. Choose **Desktop application**
-7. Click **CREATE**
-8. A dialog will pop up with your credentials. Click **DOWNLOAD JSON**
-9. Save the file to your Downloads folder (you'll move it next)
+**Features:**
+- Parallel downloads with controlled concurrency (default: 5 concurrent downloads)
+- Skips files that already exist locally
+- Displays real-time progress for each file
+- Generates statistics upon completion
 
-### Step 4: Place the Credentials File
+**Usage:**
+`ash
+GoogleDriveCli sync
+`
 
-**Important:** The `client_secret.json` file must be in a specific location for the app to find it.
+**Output Example:**
+`
+Starting Google Drive sync...
 
-1. You just downloaded a JSON file from Google Cloud (it might be named `client_secret_xxxxx.json`)
-2. **Rename it to exactly `client_secret.json`** (case-sensitive; lowercase "client_secret")
-3. **Move it to the GoogleDriveCli project root** – that's the folder where you see:
-   - `GoogleDriveCli.csproj`
-   - `.gitignore`
-   - `README.md`
-   - `LICENSE`
+Fetching file list from Google Drive...
+Found 150 items. Starting parallel downloads...
 
-So the final path should be: `C:\Users\YourUsername\source\repos\GoogleDriveCli\client_secret.json`
+[DOWNLOADING] Document.pdf...
+[SUCCESS] Document.pdf
+[SKIPPED] Photo.jpg (already exists)
+[DOWNLOADING] Report.xlsx...
+[SUCCESS] Report.xlsx
+[FAILED] CorruptedFile.txt
 
-**Verify it's in the right place:**
-```bash
-dir client_secret.json
-# or on Mac/Linux:
-ls -la client_secret.json
-```
-
-If you see the file listed, you're good. If it says "not found", you put it in the wrong folder.
-
-### Step 5: First Run and Authentication
-
-1. Run the app:
-```bash
-dotnet run --configuration Release -- sync
-```
-
-2. The app will:
-   - Detect that you don't have a saved token
-   - Open your default browser to Google's login page
-   - Ask you to log in to your Google account
-   - Ask for permission to access your Google Drive
-   - After you approve, the page will show "Authorization successful" and you can close the browser tab
-
-3. The app saves your authentication token locally (see "Token Storage" below) so you don't have to log in again next time.
-
-### Token Storage
-
-After first login, your authentication token is stored at:
-- **Windows:** `%APPDATA%\GoogleDriveCli\token.json`
-- **Mac:** `~/.config/GoogleDriveCli/token.json`
-- **Linux:** `~/.config/GoogleDriveCli/token.json`
-
-You can delete this file anytime to force a re-authentication on the next run. The token is never sent anywhere – it's just used locally to talk to Google's API.
-
-### Troubleshooting Google Setup
-
-**"Can't find client_secret.json"**
-- Make sure the file is named exactly `client_secret.json` (all lowercase)
-- Make sure it's in the project root, not in a subfolder
-- Make sure you didn't accidentally put it in `bin/` or `obj/`
-- Try running from the project root: `dotnet run --configuration Release -- sync`
-
-**"Google won't let me log in"**
-- Did you enable the Google Drive API? (step 2)
-- Did you add your email to the test users? (step 3)
-- If it still fails, delete the token file and try again: `del %APPDATA%\GoogleDriveCli\token.json`
-
-**"Access Denied" or "Insufficient Permissions"**
-- The Drive API isn't enabled in your Google Cloud project. Go back to step 2.
-- Your credentials might be wrong. Delete `%APPDATA%\GoogleDriveCli\token.json` and try again.
-
-**"Invalid client" error**
-- You're using the wrong JSON file. Make sure you downloaded the OAuth client credentials (not an API key or service account key).
-- Delete your token file and delete `client_secret.json`, then download a fresh copy from Google Cloud.
-
-## How I Built This
-
-### Parallel Downloads
-
-I went with `Parallel.ForEachAsync` with a `MaxDegreeOfParallelism` of 5. The reason I picked this approach: I wanted something that's bounded (doesn't spin up unlimited tasks), but doesn't feel like overkill. A semaphore or channel would work too, but `Parallel.ForEachAsync` is cleaner for this use case and handles thread pool management automatically. Five concurrent downloads keeps the network pipe full without hammering the API or your system.
-
-The files download to a `Downloads/` folder in your current directory. If a file already exists locally, it gets skipped.
-
-### Thread-Safe Statistics
-
-For counting successful/failed downloads without race conditions, I used `Interlocked.Increment` and `Interlocked.Add`. These are lock-free atomic operations—no mutexes, no contention. Every thread increments the counters safely, and the final stats are always accurate. I track:
-- Total files found
-- Successful downloads
-- Failed downloads
-- Skipped (already exist)
-- Total bytes downloaded
-- Elapsed time
-
-### Download Status Detection in Search
-
-When you search for files, the app shows whether each one is already downloaded. I check the local `Downloads/` folder to see if the file exists—straightforward and fast. No manifest file needed for this; the filesystem is the source of truth. If you want to force a re-download, just delete the file locally and run sync again.
-
-### The Downloads Folder
-
-All synced files go into a `Downloads/` folder created in your current working directory. So if you run:
-
-```bash
-cd C:\Users\You\Projects
-dotnet run --configuration Release -- sync
-```
-
-The files will download to `C:\Users\You\Projects\Downloads/`. If you run from a different directory, the `Downloads/` folder is created there instead.
-
-The folder structure in your Drive is preserved. For example:
-- `Google Drive/Documents/MyFile.txt` → `Downloads/Documents/MyFile.txt`
-- `Google Drive/Photos/Vacation/pic.jpg` → `Downloads/Photos/Vacation/pic.jpg`
-
-If the same folder structure already exists locally, new files are added and existing ones are skipped.
-
-## Commands
-
-### `sync`
-
-Downloads everything from your Google Drive to the `Downloads/` folder. Runs up to 5 downloads in parallel. When it finishes, you get a summary:
-
-```
+============================================================
+SYNC STATISTICS
+============================================================
 Total Items:             150
 Successful Downloads:    147
 Failed Downloads:        1
 Skipped (Already Exist): 2
 Total Bytes Downloaded:  2.45 GB
 Time Elapsed:            00:05:32
-```
+============================================================
+`
 
-### `search [query]`
+### search
+Searches for files in Google Drive by name and displays their download status.
 
-Searches your Drive by filename. Shows each result with its download status:
+**Features:**
+- Searches all files in Google Drive by name
+- Shows whether each file is already downloaded locally
+- Displays file type (File or Folder)
 
-```
-Found 3 result(s):
+**Usage:**
+`ash
+GoogleDriveCli search "query"
+`
 
-Name                      Type      Status
-────────────────────────────────────────────
-vacation_photos.zip       File      [Not Downloaded]
-photos_2024.pdf          File      [Downloaded]
-Photos                   Folder    [Not Downloaded]
-```
+**Output Example:**
+`
+Searching for: 'photos'
 
-### `upload [local_path] [drive_path]`
+Found 5 result(s):
 
-Uploads a file from your computer to Google Drive. If you specify a folder path that doesn't exist, it creates the whole hierarchy:
+Name                                     Type            Status
+---------------------------------------------------------------------------
+Vacation_Photos.zip                      File            [Not Downloaded]
+photo_album_2024.pdf                     File            [Downloaded]
+Photos                                   Folder          [Not Downloaded]
+`
 
-```bash
-./GoogleDriveCli.exe upload "C:\Users\You\Documents\file.txt" "Backups/Documents/2024"
-```
+### upload
+Uploads a file from the local file system to Google Drive.
 
-If the folders `Backups/Documents/2024` don't exist, they get created. If something goes wrong—bad path, permission issue, file not found—you get a clear error message.
+**Features:**
+- Upload to root or nested folder paths
+- Automatically creates folder paths if they don't exist
+- Graceful error handling for invalid paths
 
-## Error Handling
+**Usage:**
+`ash
+# Upload to root
+GoogleDriveCli upload "C:\myfile.txt"
 
-The app handles network hiccups gracefully. If Google's API rate-limits you (HTTP 429), or there's a transient network error, it retries automatically with exponential backoff. It won't crash on a bad file path or permission error—it'll tell you what went wrong and keep going.
+# Upload to a specific folder path (creates if needed)
+GoogleDriveCli upload "C:\myfile.txt" "Folder1/Folder2"
+`
+
+### help
+Displays help information and command usage examples.
+
+**Usage:**
+`ash
+GoogleDriveCli help
+`
 
 ## Architecture
 
-The code is organized into services:
+### Design Principles
 
-- `AuthService` – Handles OAuth login and token storage
-- `DriveService` – Talks to Google Drive API, lists/searches/downloads/uploads files
-- `FileService` – Handles local file operations and coordinates parallel downloads
-- `RetryPolicy` – Exponential backoff retry logic for failed requests
-- `LocalFileManifest` – Tracks downloaded files (optional manifest for future features)
-- `SyncStatisticsCollector` – Collects stats in a thread-safe way
-- `ConsoleStatisticsRenderer` – Pretty-prints output using Spectre.Console
+#### 1. **Separation of Concerns**
+The application is organized into distinct service layers:
 
-Each service has a single job, so adding features or fixing bugs is straightforward.
+- **Program.cs**: CLI parsing and command orchestration
+- **AuthService**: OAuth2 authentication and token persistence
+- **DriveService**: Google Drive API interactions (list, search, download, upload, folder management)
+- **FileService**: Local file system operations and parallel download coordination
 
-## Project Structure
+#### 2. **Parallel Download Strategy**
 
-```
-GoogleDriveCli/
-├── Program.cs                 – Entry point, command dispatcher
-├── GoogleDriveCli.csproj      – Project file (lists NuGet dependencies)
-├── Services/
-│   ├── AuthService.cs              – OAuth 2.0 login and token management
-│   ├── DriveService.cs             – Google Drive API wrapper
-│   ├── FileService.cs              – Local file operations, parallel downloads
-│   ├── RetryPolicy.cs              – Retry logic with exponential backoff
-│   ├── LocalFileManifest.cs        – Tracks which files have been downloaded
-│   ├── SyncStatisticsCollector.cs  – Thread-safe stat collection
-│   └── ConsoleStatisticsRenderer.cs – Spectre.Console formatting
-├── Properties/
-│   └── launchSettings.json    – Launch configuration
-├── bin/
-│   └── Release/net8.0/        – Compiled executable (after dotnet build)
-├── LICENSE                    – MIT License
-├── README.md                  – This file
-└── client_secret.json         – [YOU PROVIDE THIS] Google OAuth credentials
-```
+The FileService.DownloadFilesInParallelAsync method implements efficient parallel downloading:
+
+`
++---------------------------------------------+
+¦        SemaphoreSlim (MaxConcurrency = 5)   ¦
+¦  Controls max concurrent operations         ¦
++---------------------------------------------+
+         ¦      ¦      ¦      ¦      ¦
+    +----------------------------------+
+    ¦      ¦      ¦      ¦      ¦      ¦
+   Task1  Task2  Task3  Task4  Task5  Task6(waits)
+    ¦      ¦      ¦      ¦      ¦      ¦
+    +----------------------------------+
+         Download Operations
+`
+
+- **SemaphoreSlim**: Ensures only 5 files are downloaded simultaneously, preventing resource exhaustion
+- **Task.WhenAll**: Waits for all download tasks to complete
+- **Interlocked Operations**: Thread-safe updates to success/failure counters
+
+#### 3. **Thread-Safe Statistics**
+
+Counters are updated using Interlocked class methods to prevent race conditions:
+
+`csharp
+// Thread-safe increment
+Interlocked.Increment(ref _successCount);
+
+// Thread-safe addition for bytes
+Interlocked.Add(ref _totalBytes, file.Size.Value);
+`
+
+This ensures accurate statistics even with concurrent downloads.
+
+#### 4. **Token Persistence**
+
+- Tokens are stored in: %APPDATA%/GoogleDriveCli/token.json
+- The application uses FileDataStore to automatically manage token refresh
+- Users only need to authenticate once; subsequent runs reuse the stored token
+
+#### 5. **Error Handling**
+
+- Network errors (rate limiting, connection timeouts) are caught and logged
+- File I/O errors are handled gracefully
+- Invalid paths are reported clearly to the user
+- Application doesn't crash on individual file failures; sync continues
+
+## Concurrency & Thread Safety
+
+### Key Mechanisms
+
+1. **SemaphoreSlim**: Controls the number of concurrent download operations
+   - Prevents overwhelming the system or hitting API rate limits
+   - Default concurrency: 5 (can be adjusted in FileService.DownloadFilesInParallelAsync)
+
+2. **Interlocked Operations**: All statistics counters use Interlocked methods
+   - No locks needed; atomic operations prevent race conditions
+   - Better performance than traditional locking mechanisms
+
+3. **Task.WhenAll**: Ensures all downloads complete before displaying statistics
+
+### Example Race Condition Prevention
+
+Without thread-safe operations:
+`
+Thread 1: read _successCount (value = 5)
+Thread 2: read _successCount (value = 5)
+Thread 1: increment and write (value = 6)
+Thread 2: increment and write (value = 6)  // Should be 7!
+`
+
+With Interlocked:
+`
+Thread 1: Interlocked.Increment (atomically increments to 6)
+Thread 2: Interlocked.Increment (atomically increments to 7)  // Correct!
+`
+
+## State Management
+
+### Downloaded File Tracking
+
+The application tracks downloaded files by comparing local file system with Drive files:
+
+1. **During Sync**: 
+   - Fetches all files from Google Drive
+   - Checks if each file exists in the local Downloads directory
+   - Skips existing files to avoid re-downloads
+
+2. **During Search**:
+   - Returns search results from Google Drive
+   - Queries the local Downloads directory to determine status
+   - Marks files as [Downloaded] or [Not Downloaded]
+
+### Token Storage
+
+- Tokens are stored separately from the application executable
+- Location: %APPDATA%/GoogleDriveCli/token.json
+- This directory is created automatically on first authentication
+- Token refreshes are handled automatically by the Google API client library
 
 ## Troubleshooting
 
-**Can't find `client_secret.json`**  
-Make sure it's in the project root next to `GoogleDriveCli.csproj`. The error message will tell you where it's looking.
+### "client_secret.json not found"
+- Ensure the file is placed in the same directory as the executable
+- Use the exact filename: client_secret.json (case-sensitive on some systems)
 
-**Authentication fails**  
-Delete `%APPDATA%/GoogleDriveCli/token.json` (or `~/.config/GoogleDriveCli/token.json` on Linux) and try again. You might also want to re-download your credentials file from Google Cloud if they're old.
+### Authentication Fails
+- Verify your Google Cloud project has Drive API enabled
+- Check that your OAuth 2.0 credentials are for a "Desktop application"
+- Delete %APPDATA%/GoogleDriveCli/token.json to force re-authentication
 
-**Rate limiting (HTTP 429)**  
-The app retries automatically. If it happens a lot, you might be hitting Google's quotas. Just wait a bit and try again.
+### Slow Downloads
+- Increase concurrency in FileService.DownloadFilesInParallelAsync (currently 5)
+- Check your network connection
+- Check your Google Drive API quota
 
-**"dotnet" command not found**  
-You need to install .NET 8.0 or later. Download it from [dotnet.microsoft.com](https://dotnet.microsoft.com/download).
+### Upload Fails
+- Verify the local file path is correct and readable
+- Check that you have sufficient Google Drive quota
+- Ensure the folder path doesn't contain invalid characters
 
-**Build fails with errors**  
-Make sure you're in the project root (the folder with `GoogleDriveCli.csproj`). Try:
-```bash
-dotnet restore
-dotnet build -c Release
-```
+## Project Structure
 
-**Downloaded files are incomplete or corrupted**  
-This sometimes happens if:
-- Your network connection dropped mid-download
-- The file was deleted on Google Drive before it finished downloading
-- You ran the program with very high concurrency (changed maxConcurrency in Program.cs)
+`
+GoogleDriveCli/
++-- GoogleDriveCli.csproj       # Project file with package references
++-- Program.cs                   # CLI entry point and command handlers
++-- Services/
+¦   +-- AuthService.cs           # OAuth2 authentication and token storage
+¦   +-- DriveService.cs          # Google Drive API wrapper
+¦   +-- FileService.cs           # Local file I/O and parallel sync logic
++-- README.md                    # This file
+`
 
-Just delete the file locally and run sync again. The app checks for existing files and skips them, so you won't re-download files that are already complete.
+## Testing
 
-**Want faster downloads?**  
-Edit `Program.cs` and change `maxConcurrency: 5` to something higher (8, 10, etc.). But be aware—too high and Google might rate-limit you. Start with 5 and increase gradually if needed.
+The project includes local test scripts for quick functionality verification:
 
-**Search shows files but says they're already downloaded when they're not**  
-Delete the `Downloads/` folder and run sync again, or check manually that the folder structure is correct:
-```bash
-dir Downloads
-```
+- **quick-test.ps1**: Fast validation of help and search commands
+- **test-googledrivecli.ps1**: Comprehensive automated test suite
+- **test-googledrivecli-interactive.ps1**: Interactive testing interface
 
-**Upload keeps failing**  
-- Make sure the local file exists: `dir "C:\path\to\file.txt"`
-- Make sure you have write access to Google Drive
-- If the folder path has special characters, try wrapping it in quotes: `upload "file.txt" "Folder/Sub-Folder"`
+To run tests:
 
-## Advanced Usage
+`powershell
+# Quick validation
+.\quick-test.ps1
 
-### Change the Download Directory
+# Full test suite
+.\test-googledrivecli.ps1
 
-By default, files download to `Downloads/` in your current directory. You can modify this in `Program.cs` line where it says:
-```csharp
-var fileService = new FileService("Downloads");
-```
+# Interactive testing
+.\test-googledrivecli-interactive.ps1
+`
 
-Change `"Downloads"` to any path you want, like `"C:\GoogleDriveBackup"`.
+Test scripts verify:
+- CLI help displays correctly
+- Search functionality works with valid credentials
+- Credential auto-discovery works from project root
+- Error handling for missing credentials
 
-### Adjust Parallel Concurrency
+## Dependencies
 
-To download faster (or slower), change the `maxConcurrency` parameter in `Program.cs`:
-```csharp
-var stats = await fileService.DownloadFilesInParallelAsync(
-    allFiles,
-    async (fileId, localPath) => await driveService.DownloadFileAsync(fileId, localPath),
-    maxConcurrency: 5);  // Change 5 to something else (e.g., 8, 10, 3)
-```
-
-Higher = faster but more network load and risk of hitting Google's rate limits.
-Lower = slower but safer for network and API quotas.
-
-### Delete the Token to Force Re-Authentication
-
-If you want to switch Google accounts or re-authenticate:
-```bash
-# Windows
-del %APPDATA%\GoogleDriveCli\token.json
-
-# Mac/Linux
-rm ~/.config/GoogleDriveCli/token.json
-```
-
-Next time you run the app, you'll be prompted to log in again.
+- **Google.Apis.Drive.v3** (v1.74.0): Official Google Drive API client
+- **Google.Apis.Auth** (v1.74.0): OAuth2 authentication support
+- **.NET 8.0**: Target framework
 
 ## License
 
-MIT. Do what you want with it.
+This project is provided as-is for educational and demonstration purposes.
+
+## Support
+
+For issues with Google Drive API integration, refer to the [official Google Drive API documentation](https://developers.google.com/drive/api/guides/about-sdk).
+
+For .NET-related questions, consult the [Microsoft .NET documentation](https://docs.microsoft.com/en-us/dotnet/).

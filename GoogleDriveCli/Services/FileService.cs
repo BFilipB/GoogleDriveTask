@@ -7,18 +7,46 @@ using System.Threading.Tasks;
 
 namespace GoogleDriveCli.Services
 {
+    public class SyncStatistics
+    {
+        public int TotalFiles { get; set; }
+        public int SuccessfulDownloads { get; set; }
+        public int FailedDownloads { get; set; }
+        public int SkippedFiles { get; set; }
+        public long TotalBytesDownloaded { get; set; }
+        public TimeSpan ElapsedTime { get; set; }
+    }
+
     public class FileService
     {
-        private readonly LocalFileManifest _manifest;
+        private readonly string _downloadDirectory;
+        private int _successCount;
+        private int _failureCount;
+        private int _skipCount;
+        private long _totalBytes;
 
         public FileService(string downloadDirectory = "Downloads")
         {
-            _manifest = new LocalFileManifest(downloadDirectory);
-            _manifest.Initialize();
+            _downloadDirectory = downloadDirectory;
+            _successCount = 0;
+            _failureCount = 0;
+            _skipCount = 0;
+            _totalBytes = 0;
         }
 
         /// <summary>
-        /// Downloads files in parallel with controlled concurrency using Parallel.ForEachAsync.
+        /// Ensures the download directory exists.
+        /// </summary>
+        public void EnsureDownloadDirectory()
+        {
+            if (!Directory.Exists(_downloadDirectory))
+            {
+                Directory.CreateDirectory(_downloadDirectory);
+            }
+        }
+
+        /// <summary>
+        /// Downloads files in parallel with controlled concurrency.
         /// Returns statistics about the sync operation.
         /// </summary>
         public async Task<SyncStatistics> DownloadFilesInParallelAsync(
@@ -26,14 +54,13 @@ namespace GoogleDriveCli.Services
             Func<string, string, Task<bool>> downloadFunc,
             int maxConcurrency = 5)
         {
-            var stats = new SyncStatisticsCollector();
+            EnsureDownloadDirectory();
 
-            // Ensure directory exists
-            var downloadDir = _manifest.GetDownloadDirectory();
-            if (!Directory.Exists(downloadDir))
-            {
-                Directory.CreateDirectory(downloadDir);
-            }
+            var startTime = DateTime.UtcNow;
+            _successCount = 0;
+            _failureCount = 0;
+            _skipCount = 0;
+            _totalBytes = 0;
 
             // Filter out folders and files already downloaded
             var filesToDownload = files
@@ -42,63 +69,76 @@ namespace GoogleDriveCli.Services
 
             var totalFiles = filesToDownload.Count;
 
-            // Use Parallel.ForEachAsync with controlled concurrency
-            var options = new ParallelOptions
+            using (var semaphore = new SemaphoreSlim(maxConcurrency, maxConcurrency))
             {
-                MaxDegreeOfParallelism = maxConcurrency,
-                CancellationToken = CancellationToken.None
+                var tasks = filesToDownload.Select(async file =>
+                {
+                    await semaphore.WaitAsync();
+                    try
+                    {
+                        var localPath = Path.Combine(_downloadDirectory, file.Name);
+
+                        // Check if file already exists
+                        if (File.Exists(localPath))
+                        {
+                            Interlocked.Increment(ref _skipCount);
+                            Console.WriteLine($"[SKIPPED] {file.Name} (already exists)");
+                            return;
+                        }
+
+                        Console.WriteLine($"[DOWNLOADING] {file.Name}...");
+                        bool success = await downloadFunc(file.Id, localPath);
+
+                        if (success)
+                        {
+                            Interlocked.Increment(ref _successCount);
+                            if (file.Size.HasValue)
+                            {
+                                Interlocked.Add(ref _totalBytes, file.Size.Value);
+                            }
+                            Console.WriteLine($"[SUCCESS] {file.Name}");
+                        }
+                        else
+                        {
+                            Interlocked.Increment(ref _failureCount);
+                            Console.WriteLine($"[FAILED] {file.Name}");
+                        }
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                });
+
+                await Task.WhenAll(tasks);
+            }
+
+            var elapsed = DateTime.UtcNow - startTime;
+
+            return new SyncStatistics
+            {
+                TotalFiles = totalFiles,
+                SuccessfulDownloads = _successCount,
+                FailedDownloads = _failureCount,
+                SkippedFiles = _skipCount,
+                TotalBytesDownloaded = _totalBytes,
+                ElapsedTime = elapsed
             };
-
-            await Parallel.ForEachAsync(filesToDownload, options, async (file, ct) =>
-            {
-                var localPath = Path.Combine(downloadDir, file.Name);
-
-                // Check if file already exists
-                if (_manifest.IsFileDownloaded(file.Name))
-                {
-                    stats.RecordSkipped(file.Name);
-                    ConsoleStatisticsRenderer.RenderFileProgress(file.Name, "skipped");
-                    return;
-                }
-
-                try
-                {
-                    ConsoleStatisticsRenderer.RenderFileProgress(file.Name, "downloading");
-                    bool success = await downloadFunc(file.Id, localPath);
-
-                    if (success)
-                    {
-                        long fileSize = file.Size ?? 0;
-                        _manifest.RecordDownload(file.Id, file.Name, fileSize);
-                        stats.RecordSuccess(file.Name, fileSize);
-                        ConsoleStatisticsRenderer.RenderFileProgress(file.Name, "success");
-                    }
-                    else
-                    {
-                        stats.RecordFailure(file.Name, "Download returned false");
-                        ConsoleStatisticsRenderer.RenderFileProgress(file.Name, "failed");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    stats.RecordFailure(file.Name, ex.Message);
-                    ConsoleStatisticsRenderer.RenderFileProgress(file.Name, "failed");
-                }
-            });
-
-            // Save manifest to persist downloaded files
-            await _manifest.SaveAsync();
-
-            return stats.Complete(totalFiles);
         }
-
 
         /// <summary>
         /// Gets the list of files already present in the download directory.
         /// </summary>
         public List<string> GetDownloadedFileNames()
         {
-            return _manifest.GetDownloadedFileNames();
+            if (!Directory.Exists(_downloadDirectory))
+                return new List<string>();
+
+            return Directory.GetFiles(_downloadDirectory)
+                .Select(Path.GetFileName)
+                .Where(f => !string.IsNullOrEmpty(f))
+                .Cast<string>()
+                .ToList();
         }
 
         /// <summary>
@@ -106,7 +146,8 @@ namespace GoogleDriveCli.Services
         /// </summary>
         public bool IsFileDownloaded(string fileName)
         {
-            return _manifest.IsFileDownloaded(fileName);
+            var localPath = Path.Combine(_downloadDirectory, fileName);
+            return File.Exists(localPath);
         }
 
         /// <summary>
@@ -114,7 +155,7 @@ namespace GoogleDriveCli.Services
         /// </summary>
         public string GetDownloadDirectory()
         {
-            return _manifest.GetDownloadDirectory();
+            return Path.GetFullPath(_downloadDirectory);
         }
     }
 }
