@@ -37,38 +37,38 @@ The application uses a robust credential lookup mechanism that checks multiple l
 
 You can place client_secret.json in any of these locations. For development, place it in the project root:
 
-`
+```
 GoogleDriveCli/
 +-- GoogleDriveCli.csproj
 +-- client_secret.json  <-- Place the file here for development
 +-- Program.cs
 +-- Services/
 +-- README.md
-`
+```
 
 For production (compiled binary), place it in the same directory as the executable:
 
-`
+```
 bin/Release/net8.0/
 +-- GoogleDriveCli.exe
 +-- client_secret.json  <-- Place the file here for release builds
 +-- (other DLL files)
-`
+```
 
 The application will automatically discover the credentials file from any of these locations and display a success message upon authentication.
 
 ### 3. Build the Application
 
-`ash
+```bash
 cd GoogleDriveCli
 dotnet build -c Release
-`
+```
 
 ### 4. Run the Application
 
 Navigate to the directory containing the compiled executable:
 
-`ash
+```bash
 cd bin/Release/net8.0
 
 # Display help
@@ -85,11 +85,12 @@ cd bin/Release/net8.0
 
 # Upload a file to a specific folder (creates folder if it doesn't exist)
 ./GoogleDriveCli upload "C:\path\to\file.txt" "MyFolder/SubFolder"
-`
+```
 
 ## Command Reference
 
 ### sync
+
 Downloads all files from Google Drive to a local Downloads directory.
 
 **Features:**
@@ -99,12 +100,14 @@ Downloads all files from Google Drive to a local Downloads directory.
 - Generates statistics upon completion
 
 **Usage:**
-`ash
+
+```bash
 GoogleDriveCli sync
-`
+```
 
 **Output Example:**
-`
+
+```
 Starting Google Drive sync...
 
 Fetching file list from Google Drive...
@@ -127,9 +130,10 @@ Skipped (Already Exist): 2
 Total Bytes Downloaded:  2.45 GB
 Time Elapsed:            00:05:32
 ============================================================
-`
+```
 
 ### search
+
 Searches for files in Google Drive by name and displays their download status.
 
 **Features:**
@@ -138,12 +142,14 @@ Searches for files in Google Drive by name and displays their download status.
 - Displays file type (File or Folder)
 
 **Usage:**
-`ash
+
+```bash
 GoogleDriveCli search "query"
-`
+```
 
 **Output Example:**
-`
+
+```
 Searching for: 'photos'
 
 Found 5 result(s):
@@ -153,9 +159,10 @@ Name                                     Type            Status
 Vacation_Photos.zip                      File            [Not Downloaded]
 photo_album_2024.pdf                     File            [Downloaded]
 Photos                                   Folder          [Not Downloaded]
-`
+```
 
 ### upload
+
 Uploads a file from the local file system to Google Drive.
 
 **Features:**
@@ -164,27 +171,31 @@ Uploads a file from the local file system to Google Drive.
 - Graceful error handling for invalid paths
 
 **Usage:**
-`ash
+
+```bash
 # Upload to root
 GoogleDriveCli upload "C:\myfile.txt"
 
 # Upload to a specific folder path (creates if needed)
 GoogleDriveCli upload "C:\myfile.txt" "Folder1/Folder2"
-`
+```
 
 ### help
+
 Displays help information and command usage examples.
 
 **Usage:**
-`ash
+
+```bash
 GoogleDriveCli help
-`
+```
 
 ## Architecture
 
 ### Design Principles
 
 #### 1. **Separation of Concerns**
+
 The application is organized into distinct service layers:
 
 - **Program.cs**: CLI parsing and command orchestration
@@ -196,19 +207,19 @@ The application is organized into distinct service layers:
 
 The FileService.DownloadFilesInParallelAsync method implements efficient parallel downloading:
 
-`
+```
 +---------------------------------------------+
-¦        SemaphoreSlim (MaxConcurrency = 5)   ¦
-¦  Controls max concurrent operations         ¦
+|        SemaphoreSlim (MaxConcurrency = 5)   |
+|  Controls max concurrent operations         |
 +---------------------------------------------+
-         ¦      ¦      ¦      ¦      ¦
-    +----------------------------------+
-    ¦      ¦      ¦      ¦      ¦      ¦
+		 |      |      |      |      |
+	+----------------------------------+
+	|      |      |      |      |      |
    Task1  Task2  Task3  Task4  Task5  Task6(waits)
-    ¦      ¦      ¦      ¦      ¦      ¦
-    +----------------------------------+
-         Download Operations
-`
+	|      |      |      |      |      |
+	+----------------------------------+
+		 Download Operations
+```
 
 - **SemaphoreSlim**: Ensures only 5 files are downloaded simultaneously, preventing resource exhaustion
 - **Task.WhenAll**: Waits for all download tasks to complete
@@ -218,13 +229,13 @@ The FileService.DownloadFilesInParallelAsync method implements efficient paralle
 
 Counters are updated using Interlocked class methods to prevent race conditions:
 
-`csharp
+```csharp
 // Thread-safe increment
 Interlocked.Increment(ref _successCount);
 
 // Thread-safe addition for bytes
 Interlocked.Add(ref _totalBytes, file.Size.Value);
-`
+```
 
 This ensures accurate statistics even with concurrent downloads.
 
@@ -258,18 +269,20 @@ This ensures accurate statistics even with concurrent downloads.
 ### Example Race Condition Prevention
 
 Without thread-safe operations:
-`
+
+```
 Thread 1: read _successCount (value = 5)
 Thread 2: read _successCount (value = 5)
 Thread 1: increment and write (value = 6)
 Thread 2: increment and write (value = 6)  // Should be 7!
-`
+```
 
 With Interlocked:
-`
+
+```
 Thread 1: Interlocked.Increment (atomically increments to 6)
 Thread 2: Interlocked.Increment (atomically increments to 7)  // Correct!
-`
+```
 
 ## State Management
 
@@ -277,7 +290,7 @@ Thread 2: Interlocked.Increment (atomically increments to 7)  // Correct!
 
 The application tracks downloaded files by comparing local file system with Drive files:
 
-1. **During Sync**: 
+1. **During Sync**:
    - Fetches all files from Google Drive
    - Checks if each file exists in the local Downloads directory
    - Skips existing files to avoid re-downloads
@@ -297,36 +310,40 @@ The application tracks downloaded files by comparing local file system with Driv
 ## Troubleshooting
 
 ### "client_secret.json not found"
-- Ensure the file is placed in the same directory as the executable
+
+- Ensure the file is placed in one of the three locations checked by the application
 - Use the exact filename: client_secret.json (case-sensitive on some systems)
 
 ### Authentication Fails
+
 - Verify your Google Cloud project has Drive API enabled
 - Check that your OAuth 2.0 credentials are for a "Desktop application"
 - Delete %APPDATA%/GoogleDriveCli/token.json to force re-authentication
 
 ### Slow Downloads
+
 - Increase concurrency in FileService.DownloadFilesInParallelAsync (currently 5)
 - Check your network connection
 - Check your Google Drive API quota
 
 ### Upload Fails
+
 - Verify the local file path is correct and readable
 - Check that you have sufficient Google Drive quota
 - Ensure the folder path doesn't contain invalid characters
 
 ## Project Structure
 
-`
+```
 GoogleDriveCli/
 +-- GoogleDriveCli.csproj       # Project file with package references
 +-- Program.cs                   # CLI entry point and command handlers
 +-- Services/
-¦   +-- AuthService.cs           # OAuth2 authentication and token storage
-¦   +-- DriveService.cs          # Google Drive API wrapper
-¦   +-- FileService.cs           # Local file I/O and parallel sync logic
+|   +-- AuthService.cs           # OAuth2 authentication and token storage
+|   +-- DriveService.cs          # Google Drive API wrapper
+|   +-- FileService.cs           # Local file I/O and parallel sync logic
 +-- README.md                    # This file
-`
+```
 
 ## Testing
 
@@ -338,7 +355,7 @@ The project includes local test scripts for quick functionality verification:
 
 To run tests:
 
-`powershell
+```powershell
 # Quick validation
 .\quick-test.ps1
 
@@ -347,7 +364,7 @@ To run tests:
 
 # Interactive testing
 .\test-googledrivecli-interactive.ps1
-`
+```
 
 Test scripts verify:
 - CLI help displays correctly
