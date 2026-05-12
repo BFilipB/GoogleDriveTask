@@ -69,25 +69,43 @@ dotnet build -c Release
 
 ### 4. Run the Application
 
-Navigate to the directory containing the compiled executable:
+You can run the application using `dotnet run` or by executing the compiled binary.
+
+**Option 1: Using dotnet run (from repository root):**
+
+```bash
+# Display help
+dotnet run -- help
+
+# Sync all files from Google Drive
+dotnet run -- sync
+
+# Search for files
+dotnet run -- search "photos"
+
+# Upload a file to the root of Google Drive
+dotnet run -- upload "C:\path\to\file.txt"
+
+# Upload a file to a specific folder (creates folder if it doesn't exist)
+dotnet run -- upload "C:\path\to\file.txt" "MyFolder/SubFolder"
+```
+
+**Option 2: Using the compiled executable:**
 
 ```bash
 cd bin/Release/net8.0
 
 # Display help
-./GoogleDriveCli help
+./GoogleDriveCli.exe help
 
 # Sync all files from Google Drive
-./GoogleDriveCli sync
+./GoogleDriveCli.exe sync
 
 # Search for files
-./GoogleDriveCli search "photos"
+./GoogleDriveCli.exe search "photos"
 
-# Upload a file to the root of Google Drive
-./GoogleDriveCli upload "C:\path\to\file.txt"
-
-# Upload a file to a specific folder (creates folder if it doesn't exist)
-./GoogleDriveCli upload "C:\path\to\file.txt" "MyFolder/SubFolder"
+# Upload a file
+./GoogleDriveCli.exe upload "C:\path\to\file.txt"
 ```
 
 ## Command Reference
@@ -105,7 +123,13 @@ Downloads all files from Google Drive to a local Downloads directory.
 **Usage:**
 
 ```bash
-GoogleDriveCli sync
+dotnet run -- sync
+```
+
+Or if using the compiled executable:
+
+```bash
+GoogleDriveCli.exe sync
 ```
 
 **Output Example:**
@@ -147,7 +171,13 @@ Searches for files in Google Drive by name and displays their download status.
 **Usage:**
 
 ```bash
-GoogleDriveCli search "query"
+dotnet run -- search "query"
+```
+
+Or if using the compiled executable:
+
+```bash
+GoogleDriveCli.exe search "query"
 ```
 
 **Output Example:**
@@ -177,10 +207,17 @@ Uploads a file from the local file system to Google Drive.
 
 ```bash
 # Upload to root
-GoogleDriveCli upload "C:\myfile.txt"
+dotnet run -- upload "C:\myfile.txt"
 
 # Upload to a specific folder path (creates if needed)
-GoogleDriveCli upload "C:\myfile.txt" "Folder1/Folder2"
+dotnet run -- upload "C:\myfile.txt" "Folder1/Folder2"
+```
+
+Or if using the compiled executable:
+
+```bash
+GoogleDriveCli.exe upload "C:\myfile.txt"
+GoogleDriveCli.exe upload "C:\myfile.txt" "Folder1/Folder2"
 ```
 
 ### help
@@ -190,7 +227,13 @@ Displays help information and command usage examples.
 **Usage:**
 
 ```bash
-GoogleDriveCli help
+dotnet run -- help
+```
+
+Or if using the compiled executable:
+
+```bash
+GoogleDriveCli.exe help
 ```
 
 ## Architecture
