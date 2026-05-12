@@ -2,6 +2,8 @@
 
 A command-line interface (CLI) tool for interacting with Google Drive. This application allows you to authenticate with Google Drive, synchronize files locally using parallel processing, search for files, and upload local files to your Drive.
 
+**Repository:** [BFilipB/GoogleDriveTask](https://github.com/BFilipB/GoogleDriveTask)
+
 ## Features
 
 - **OAuth 2.0 Authentication**: Securely authenticate with Google Drive. Tokens are stored locally and reused to avoid re-authentication.
@@ -59,8 +61,9 @@ The application will automatically discover the credentials file from any of the
 
 ### 3. Build the Application
 
+From the repository root directory, run:
+
 ```bash
-cd GoogleDriveCli
 dotnet build -c Release
 ```
 
@@ -334,16 +337,27 @@ The application tracks downloaded files by comparing local file system with Driv
 
 ## Project Structure
 
+The repository structure is as follows:
+
 ```
-GoogleDriveCli/
-+-- GoogleDriveCli.csproj       # Project file with package references
-+-- Program.cs                   # CLI entry point and command handlers
+GoogleDriveTask/                          # Repository root (cloned from GitHub)
++-- GoogleDriveCli.csproj                 # Main project file
++-- Program.cs                            # CLI entry point and command handlers
++-- Properties/
+|   +-- launchSettings.json               # Visual Studio launch configuration
 +-- Services/
-|   +-- AuthService.cs           # OAuth2 authentication and token storage
-|   +-- DriveService.cs          # Google Drive API wrapper
-|   +-- FileService.cs           # Local file I/O and parallel sync logic
-+-- README.md                    # This file
+|   +-- AuthService.cs                    # OAuth2 authentication and token storage
+|   +-- DriveService.cs                   # Google Drive API wrapper
+|   +-- FileService.cs                    # Local file I/O and parallel sync logic
++-- GoogleDriveCli/                       # Nested folder (code organization)
++-- bin/                                  # Build output
++-- obj/                                  # Build intermediates
++-- README.md                             # This file
++-- .gitignore                            # Git configuration
++-- GoogleDriveCli.csproj                 # Project configuration
 ```
+
+**Key Note:** When you clone the repository from GitHub, the root folder is the project directory. You don't need to navigate to a subdirectory to build or run the application.
 
 ## Testing
 
